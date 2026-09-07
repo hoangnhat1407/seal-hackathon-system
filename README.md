@@ -50,11 +50,14 @@ This repository contains a full-stack web platform that digitizes and centralize
 
 ### Đào Hoàng Nhật — Backend Developer
 
-- Bootstrapped the backend codebase, initializing the Spring Boot + Maven project structure used throughout development.
-- Built the OTP-based password reset flow end-to-end, from backend token generation/validation to the frontend reset screen.
-- Hardened validation across team invites, event scoring, and system logs, and added test coverage for validation and auth/password-reset flows.
-- Implemented in-app notification events on the backend and restored the mentor history API and participant read-only views.
-- Configured OAuth2 redirect handling for deployment and owned the project's deployment process.
+- Bootstrapped the backend codebase, initializing the Spring Boot + Maven project architecture, initial entity models, and application configurations used throughout development.
+- Designed and documented the relational database schema redesign for MySQL and SQL Server, including DDL structures, implementation plans, and seed data scenarios.
+- Implemented core backend domain logic and CRUD operations for events, rounds, tracks, teams, assignments, participant join requests, and in-app notifications.
+- Built the OTP-based password reset module end-to-end, covering backend token generation/validation, automated email delivery, and frontend UI flow.
+- Architected the automated End-to-End (E2E) testing framework using Playwright, building multi-persona test scenarios and batch runners covering the full hackathon lifecycle.
+- Authored comprehensive backend unit and integration test suites (JUnit 5, Mockito) covering core domain services, validation rules, and scoring flows.
+- Built data export features (completed event CSV exports, admin score distribution) and implemented role-aware participant access restrictions.
+- Configured Docker containerization, AWS EC2 preview deployments, OAuth2 redirect domain handling, and CI/CD test gates before release.
 
 ## Scope
 
