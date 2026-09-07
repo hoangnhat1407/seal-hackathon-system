@@ -56,7 +56,6 @@ This repository contains a full-stack web platform that digitizes and centralize
 - Built the OTP-based password reset module end-to-end, covering backend token generation/validation, automated email delivery, and frontend UI flow.
 - Architected the automated End-to-End (E2E) testing framework using Playwright, building multi-persona test scenarios and batch runners covering the full hackathon lifecycle.
 - Authored comprehensive backend unit and integration test suites (JUnit 5, Mockito) covering core domain services, validation rules, and scoring flows.
-- Built data export features (completed event CSV exports, admin score distribution) and implemented role-aware participant access restrictions.
 - Configured Docker containerization, AWS EC2 preview deployments, OAuth2 redirect domain handling, and CI/CD test gates before release.
 
 ## Scope
