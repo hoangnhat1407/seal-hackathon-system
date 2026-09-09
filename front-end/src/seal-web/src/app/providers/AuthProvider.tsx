@@ -30,6 +30,7 @@ export type LoginResult =
   | 'ok:select-role'
   | 'invalid_credentials'
   | 'pending_approval'
+  | 'account_inactive'
   | 'access_denied';
 
 // ── Context type ─────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ interface AuthContextType {
   activeRole: string | null;
   setActiveRole: (role: string | null) => void;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<LoginResult>;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateLeaderStatus: (isLeader: boolean) => void;
   clearTeam: () => void;
   refreshTeamContext: () => Promise<void>;
@@ -314,6 +315,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (err.status === 403 && err.message.toLowerCase().includes('pending approval')) {
           return 'pending_approval';
         }
+        if (err.status === 403 && err.message.toLowerCase().includes('inactive')) {
+          return 'account_inactive';
+        }
         if (err.status === 403) return 'access_denied';
         if (err.status === 401) return 'invalid_credentials';
       }
@@ -322,14 +326,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   // ── Logout ──────────────────────────────────────────────────────────
-  function logout() {
-    // Fire-and-forget — clear local state immediately for snappy UX.
-    // Can't check for a cookie from JS, so always call; the backend clears it.
-    apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  async function logout(): Promise<void> {
+    // Clear local state immediately for snappy UX
     setStoredActiveRole(null);
     setCurrentUser(null);
     setAvailableRoles([]);
     setActiveRoleState(null);
+
+    // Call backend to clear the HttpOnly auth cookie and CSRF cookie
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore network errors on logout — local state is already cleared
+    }
   }
 
   function updateLeaderStatus(isLeader: boolean) {

@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -64,9 +65,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
-        } catch (JwtException | IllegalArgumentException e) {
-            // Invalid token — let the request continue without authentication
-            // The downstream authorization check will reject it with 401
+        } catch (JwtException | IllegalArgumentException | AuthenticationException e) {
+            // Invalid token or user no longer exists in DB — let the request continue without authentication.
+            // The downstream authorization check will reject protected endpoints with 401,
+            // while public endpoints (e.g. /api/auth/login) can proceed normally.
         }
 
         filterChain.doFilter(request, response);
