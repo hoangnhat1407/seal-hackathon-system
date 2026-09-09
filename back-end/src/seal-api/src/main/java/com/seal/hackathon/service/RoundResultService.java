@@ -30,6 +30,7 @@ public class RoundResultService {
     private final TeamEventEntryRepository teamEventEntryRepository;
     private final NotificationService notificationService;
     private final JudgeScoringCompletenessService completenessService;
+    private final HackathonEventService hackathonEventService;
 
     // ── Get leaderboard (published results only) ──────────────────────
 
@@ -195,6 +196,15 @@ public class RoundResultService {
                         "Results for \"" + roundName + "\" are out — your team ranked #"
                                 + r.getRankPosition() + (isAdvanced(r) ? " and advanced!" : "."),
                         "RESULT")));
+
+        // If this is the final round, automatically mark the event as COMPLETED.
+        if (Boolean.TRUE.equals(round.getIsFinal())) {
+            HackathonEvent event = eventRepository.findById(eventId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
+            if ("IN_PROGRESS".equalsIgnoreCase(event.getStatus())) {
+                hackathonEventService.completeEvent(eventId);
+            }
+        }
 
         return results.stream().map(this::mapToResponse).collect(Collectors.toList());
     }

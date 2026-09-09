@@ -396,11 +396,11 @@ function NeonImageFrame({ src, label, height, borderColor = C.green }: {
 const sponsors = [
   { name: "TechCorp", tier: "platinum" },
   { name: "DevHub", tier: "platinum" },
-  { name: "CodeLab", tier: "gold" },
-  { name: "ByteWave", tier: "gold" },
-  { name: "SyncIO", tier: "silver" },
-  { name: "NullPtr", tier: "silver" },
-  { name: "OpenSrc", tier: "silver" },
+  { name: "CodeLab", tier: "platinum" },
+  { name: "ByteWave", tier: "platinum" },
+  { name: "SyncIO", tier: "platinum" },
+  { name: "NullPtr", tier: "platinum" },
+  { name: "OpenSrc", tier: "platinum" },
 ];
 
 const faqs = [
@@ -1447,19 +1447,18 @@ function SponsorsSection() {
         <DecodeHeading title="Our Sponsors" subtitle="Backed by world-class tech companies who believe in developer talent." />
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 12, marginTop: 48 }}>
           {sponsors.map((s) => {
-            const isPlatinum = s.tier === "platinum";
             return (
               <div
                 key={s.name}
                 style={{
                   background: C.surface,
-                  border: isPlatinum ? "1px solid rgba(34,197,94,0.3)" : `1px solid ${C.border}`,
-                  padding: isPlatinum ? "14px 28px" : "10px 20px",
+                  border: "1px solid rgba(34,197,94,0.3)",
+                  padding: "14px 28px",
                   fontFamily: "'JetBrains Mono', monospace",
-                  color: isPlatinum ? C.green : C.textMuted,
-                  fontSize: isPlatinum ? 14 : 12,
-                  fontWeight: isPlatinum ? 700 : 400,
-                  boxShadow: isPlatinum ? `0 0 16px rgba(34,197,94,0.1), 0 0 30px rgba(59,130,246,0.06)` : "none",
+                  color: C.green,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  boxShadow: `0 0 16px rgba(34,197,94,0.1), 0 0 30px rgba(59,130,246,0.06)`,
                   transition: "all 0.2s ease",
                   position: "relative",
                   overflow: "hidden",
@@ -1470,14 +1469,12 @@ function SponsorsSection() {
                   (e.currentTarget as HTMLElement).style.color = C.blueBright;
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor = isPlatinum ? "rgba(34,197,94,0.3)" : C.border;
-                  (e.currentTarget as HTMLElement).style.boxShadow = isPlatinum ? `0 0 16px rgba(34,197,94,0.1)` : "none";
-                  (e.currentTarget as HTMLElement).style.color = isPlatinum ? C.green : C.textMuted;
+                  (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,197,94,0.3)";
+                  (e.currentTarget as HTMLElement).style.boxShadow = `0 0 16px rgba(34,197,94,0.1), 0 0 30px rgba(59,130,246,0.06)`;
+                  (e.currentTarget as HTMLElement).style.color = C.green;
                 }}
               >
-                {isPlatinum && (
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: C.gradientPrimary, opacity: 0.5 }} />
-                )}
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: C.gradientPrimary, opacity: 0.5 }} />
                 {s.name}
               </div>
             );

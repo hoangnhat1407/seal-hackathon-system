@@ -2,10 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   canCreateEvent,
   canReopenEvent,
-  canRequestReopen,
   canCompleteEvent,
   canChangeEventStatus,
-  canManageReopenRequests,
   type AppRole,
 } from "@/shared/permissions";
 
@@ -25,34 +23,29 @@ function expectAllowedFor(
 }
 
 describe("event permissions", () => {
-  it("only ADMIN can create an event", () => {
-    expectAllowedFor(canCreateEvent, ['ADMIN']);
+  it("only COORDINATOR can create an event", () => {
+    expectAllowedFor(canCreateEvent, ['COORDINATOR']);
   });
 
-  it("only ADMIN can reopen a completed event", () => {
-    expectAllowedFor(canReopenEvent, ['ADMIN']);
+  it("only COORDINATOR can reopen a completed event", () => {
+    expectAllowedFor(canReopenEvent, ['COORDINATOR']);
   });
 
-  it("only ADMIN can complete a running event", () => {
-    expectAllowedFor(canCompleteEvent, ['ADMIN']);
+  it("only COORDINATOR can complete a running event", () => {
+    expectAllowedFor(canCompleteEvent, ['COORDINATOR']);
   });
 
-  it("only ADMIN can manage (approve/reject) reopen requests", () => {
-    expectAllowedFor(canManageReopenRequests, ['ADMIN']);
+  it("only COORDINATOR can change other event statuses", () => {
+    expectAllowedFor(canChangeEventStatus, ['COORDINATOR']);
   });
 
-  it("only COORDINATOR can request a reopen", () => {
-    expectAllowedFor(canRequestReopen, ['COORDINATOR']);
-  });
-
-  it("ADMIN and COORDINATOR can change other event statuses", () => {
-    expectAllowedFor(canChangeEventStatus, ['ADMIN', 'COORDINATOR']);
-  });
-
-  it("a coordinator cannot create or reopen, but can request a reopen", () => {
-    expect(canCreateEvent('COORDINATOR')).toBe(false);
-    expect(canReopenEvent('COORDINATOR')).toBe(false);
-    expect(canCompleteEvent('COORDINATOR')).toBe(false);
-    expect(canRequestReopen('COORDINATOR')).toBe(true);
+  it("a coordinator can create, complete, and reopen events directly, while admin cannot", () => {
+    expect(canCreateEvent('COORDINATOR')).toBe(true);
+    expect(canReopenEvent('COORDINATOR')).toBe(true);
+    expect(canCompleteEvent('COORDINATOR')).toBe(true);
+    expect(canCreateEvent('ADMIN')).toBe(false);
+    expect(canReopenEvent('ADMIN')).toBe(false);
+    expect(canCompleteEvent('ADMIN')).toBe(false);
   });
 });
+

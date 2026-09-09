@@ -2,11 +2,10 @@
 //
 // These are PURE functions of the (frontend) role string so they are trivial to
 // unit-test and to reuse across pages. They mirror the backend rules, which are
-// the REAL gate (see HackathonEventController / ReopenRequestController):
-//   - Only SYSTEM_ADMIN may create or reopen an event.
+// the REAL gate (see HackathonEventController):
+//   - SYSTEM_ADMIN and EVENT_COORDINATOR may create or reopen an event.
 //   - Coordinators run an event's forward lifecycle (OPEN→SETUP→IN_PROGRESS→
-//     COMPLETED) but cannot create it, and cannot reopen a COMPLETED one —
-//     they file a reopen request for the admin to approve.
+//     COMPLETED) and can directly reopen a COMPLETED one.
 //
 // The FE role is the normalized value from AuthProvider
 // ('ADMIN' | 'COORDINATOR' | 'JUDGE' | 'MENTOR' | 'PARTICIPANT'), NOT the raw
@@ -16,41 +15,28 @@ import { useAuth } from "@/app/providers/AuthProvider";
 
 export type AppRole = 'PARTICIPANT' | 'MENTOR' | 'JUDGE' | 'COORDINATOR' | 'ADMIN';
 
-/** Creating a new event is a platform action — Admin only. */
+/** Creating a new event — Coordinator only. */
 export function canCreateEvent(role: AppRole | null | undefined): boolean {
-  return role === 'ADMIN';
+  return role === 'COORDINATOR';
 }
 
-/** Directly reopening a COMPLETED event (COMPLETED → IN_PROGRESS) — Admin only. */
+/** Directly reopening a COMPLETED event (COMPLETED → IN_PROGRESS) — Coordinator only. */
 export function canReopenEvent(role: AppRole | null | undefined): boolean {
-  return role === 'ADMIN';
-}
-
-/** Filing a "please reopen" request — Coordinators only (Admins just reopen). */
-export function canRequestReopen(role: AppRole | null | undefined): boolean {
   return role === 'COORDINATOR';
 }
 
 /**
- * Completing a running event (IN_PROGRESS → COMPLETED) — Admin only. Enforced
- * on the backend via the dedicated POST /api/events/{id}/complete endpoint
- * (the generic PUT no longer allows IN_PROGRESS → COMPLETED).
+ * Completing a running event (IN_PROGRESS → COMPLETED) — Coordinator only.
  */
 export function canCompleteEvent(role: AppRole | null | undefined): boolean {
-  return role === 'ADMIN';
+  return role === 'COORDINATOR';
 }
 
 /**
- * Driving the Coordinator-run lifecycle transitions (OPEN, SETUP, START,
- * CANCEL...). Completing is excluded — see canCompleteEvent.
+ * Driving the Coordinator-run lifecycle transitions (OPEN, SETUP, START...).
  */
 export function canChangeEventStatus(role: AppRole | null | undefined): boolean {
-  return role === 'ADMIN' || role === 'COORDINATOR';
-}
-
-/** Reviewing (approve/reject) Coordinator reopen requests — Admin only. */
-export function canManageReopenRequests(role: AppRole | null | undefined): boolean {
-  return role === 'ADMIN';
+  return role === 'COORDINATOR';
 }
 
 /**
@@ -64,9 +50,8 @@ export function usePermissions() {
     role,
     canCreateEvent: canCreateEvent(role),
     canReopenEvent: canReopenEvent(role),
-    canRequestReopen: canRequestReopen(role),
     canCompleteEvent: canCompleteEvent(role),
     canChangeEventStatus: canChangeEventStatus(role),
-    canManageReopenRequests: canManageReopenRequests(role),
   };
 }
+

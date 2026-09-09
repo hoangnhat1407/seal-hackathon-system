@@ -324,10 +324,10 @@ describe("nextStatusActions (status-transition rules)", () => {
 });
 
 describe("statusChangeCopy (status-transition rules)", () => {
-  it("warns that only System Admin can reopen once COMPLETED", () => {
+  it("notes that Coordinator can reopen once COMPLETED", () => {
     const copy = statusChangeCopy("IN_PROGRESS", { label: "COMPLETE EVENT", next: "COMPLETED", variant: "cyber" });
     expect(copy.title).toBe("Complete this event?");
-    expect(copy.warning).toMatch(/only System Admin can reopen/i);
+    expect(copy.warning).toMatch(/Coordinator/i);
     expect(copy.variant).toBe("cyber");
   });
 
