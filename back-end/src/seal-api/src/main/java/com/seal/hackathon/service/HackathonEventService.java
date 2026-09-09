@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -83,11 +84,21 @@ public class HackathonEventService {
             "CANCELLED",   Set.of("DRAFT")
     );
 
+    private static final Map<String, Integer> SEASON_CHRONO_ORDER = Map.of(
+            "SPRING", 1,
+            "SUMMER", 2,
+            "FALL", 3
+    );
+
     @Transactional(readOnly = true)
     public List<HackathonEventResponse> getAllHackathonEvents() {
-        return hackathonEventRepository
-                .findAll(Sort.by(Sort.Direction.DESC, "createdAt"))
-                .stream()
+        return hackathonEventRepository.findAll().stream()
+                .sorted(Comparator
+                        .comparing((HackathonEvent e) -> e.getYear() != null ? e.getYear() : 0, Comparator.reverseOrder())
+                        .thenComparing(e -> SEASON_CHRONO_ORDER.getOrDefault(
+                                e.getSeason() != null ? e.getSeason().toUpperCase() : "", 0), Comparator.reverseOrder())
+                        .thenComparing(HackathonEvent::getStartDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(HackathonEvent::getEventId, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }

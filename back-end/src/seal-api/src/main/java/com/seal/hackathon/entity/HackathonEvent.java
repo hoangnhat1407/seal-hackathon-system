@@ -25,7 +25,7 @@ public class HackathonEvent {
     @Column(name = "season", nullable = false, length = 20)
     private String season;
 
-    @Column(name = "year", nullable = false)
+    @Column(name = "`year`", nullable = false)
     private Integer year;
 
     @Column(name = "description", columnDefinition = "TEXT")

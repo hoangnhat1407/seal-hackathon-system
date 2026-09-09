@@ -40,8 +40,8 @@ services:
       # Blank on localhost; the deploy workflow supplies the shared production domain
       # so the frontend can read the XSRF-TOKEN issued by the API subdomain.
       - CSRF_COOKIE_DOMAIN=${CSRF_COOKIE_DOMAIN:-}
-      # Dữ liệu demo (tùy chọn): S0|S1|S2|S3 để seed kịch bản; mặc định NONE = không data giả.
-      # - SEED_SCENARIO=S3
+      # Dữ liệu demo: NONE | S1 | S25 | S3 | ALL (seed 3 sự kiện Spring, Summer, Fall 2026)
+      - SEED_SCENARIO=${SEED_SCENARIO:-ALL}
       # Khóa schema khi DB đã có dữ liệu thật không muốn bị tự động ALTER lúc redeploy
       # (mặc định là "update" nếu bỏ comment dòng dưới — không set = giữ nguyên "update").
       # - DDL_AUTO=validate

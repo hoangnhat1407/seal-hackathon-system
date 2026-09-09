@@ -1,4 +1,4 @@
-name: Deploy preview branch to AWS EC2
+name: Deploy main branch to AWS EC2
 
 on:
   push:

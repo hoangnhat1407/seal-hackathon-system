@@ -12,7 +12,6 @@ public class CreateRoundRequest {
     @NotBlank(message = "Round name is required")
     private String name;
 
-    @NotNull(message = "Order number is required")
     private Integer orderNumber;
 
     @NotNull(message = "Start time is required")
@@ -21,7 +20,6 @@ public class CreateRoundRequest {
     @NotNull(message = "End time is required")
     private LocalDateTime endTime;
 
-    @NotNull(message = "Submission deadline is required")
     private LocalDateTime submissionDeadline;
 
     @Min(value = 1, message = "Top N advance must be at least 1")

@@ -185,6 +185,30 @@ export function pickDefaultEvent(rows: EventRow[]): EventRow | undefined {
   return rows.find(e => e.status !== 'DRAFT') ?? rows[0];
 }
 
+const SEASON_CHRONO_ORDER: Record<string, number> = {
+  SPRING: 1,
+  SUMMER: 2,
+  FALL: 3,
+};
+
+export function sortEventsChronological(events: EventRow[]): EventRow[] {
+  return [...events].sort((a, b) => {
+    const yA = a.year ?? (a.startDate ? new Date(a.startDate).getFullYear() : 0);
+    const yB = b.year ?? (b.startDate ? new Date(b.startDate).getFullYear() : 0);
+    if (yA !== yB) return yB - yA;
+
+    const sA = SEASON_CHRONO_ORDER[(a.season ?? "").toUpperCase()] ?? 0;
+    const sB = SEASON_CHRONO_ORDER[(b.season ?? "").toUpperCase()] ?? 0;
+    if (sA !== sB) return sB - sA;
+
+    const tA = a.startDate ? new Date(a.startDate).getTime() : 0;
+    const tB = b.startDate ? new Date(b.startDate).getTime() : 0;
+    if (tA !== tB) return tB - tA;
+
+    return b.eventId - a.eventId;
+  });
+}
+
 // Shared "all events" summary card used by both the Admin and Coordinator
 // consoles (below the detail panel). Includes a live "find event" filter that
 // matches name / season / year (case-insensitive substring). The filter only
@@ -208,6 +232,8 @@ export function EventsListCard({
         String(ev.year ?? "").includes(q))
     : events;
 
+  const sorted = sortEventsChronological(filtered);
+
   const muted: React.CSSProperties = { padding: 20, color: C.textMuted, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, textAlign: "center" };
   const selectEventFromKeyboard = (event: React.KeyboardEvent<HTMLDivElement>, eventId: number) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -230,11 +256,11 @@ export function EventsListCard({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          {filtered.length === 0 ? (
+          {sorted.length === 0 ? (
             <div style={{ ...muted, padding: 12 }}>No events match your search.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {filtered.map(ev => {
+              {sorted.map(ev => {
                 const active = selectedEventId === ev.eventId;
                 const rowAction = renderRowAction?.(ev);
                 return (
