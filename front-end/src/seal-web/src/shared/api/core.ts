@@ -28,9 +28,11 @@ function getCsrfToken(): string | null {
 // GET and reads the same resulting cookie value.
 let csrfPriming: Promise<string | null> | null = null;
 
-async function ensureCsrfToken(): Promise<string | null> {
-  const existing = getCsrfToken();
-  if (existing) return existing;
+async function ensureCsrfToken(force = false): Promise<string | null> {
+  if (!force) {
+    const existing = getCsrfToken();
+    if (existing) return existing;
+  }
   if (!csrfPriming) {
     csrfPriming = fetch(`${BASE_URL}/api/csrf`, { credentials: 'include' })
       .catch(() => {})
@@ -60,14 +62,16 @@ export function apiErrorMessage(err: unknown, fallback = 'Something went wrong')
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
+  isRetry = false,
 ): Promise<T> {
   // For FormData (file uploads) let the browser set the multipart Content-Type
   // with its boundary — forcing application/json would break the request.
   const isFormData = options.body instanceof FormData;
   const method = (options.method ?? 'GET').toUpperCase();
+  const isMutation = method !== 'GET' && method !== 'HEAD';
   // GET/HEAD don't need CSRF; for everything else make sure the token cookie
   // exists first (priming it if this is the first backend contact).
-  const csrfToken = method !== 'GET' && method !== 'HEAD' ? await ensureCsrfToken() : null;
+  const csrfToken = isMutation ? await ensureCsrfToken() : null;
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     credentials: 'include', // send/receive the HttpOnly auth cookie
@@ -79,6 +83,15 @@ export async function apiFetch<T>(
   });
 
   if (!res.ok) {
+    // If a mutation failed with 403, it could be a stale/mismatched CSRF token.
+    // Re-prime a fresh token from /api/csrf and retry once before failing.
+    if (res.status === 403 && isMutation && !isRetry) {
+      const freshCsrf = await ensureCsrfToken(true);
+      if (freshCsrf) {
+        return apiFetch<T>(path, options, true);
+      }
+    }
+
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body?.message ?? `HTTP ${res.status}`);
   }

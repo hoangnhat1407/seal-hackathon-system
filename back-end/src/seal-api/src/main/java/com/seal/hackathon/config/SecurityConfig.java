@@ -81,6 +81,13 @@ public class SecurityConfig {
             .csrf(csrf -> csrf
                 .csrfTokenRepository(csrfTokenRepository())
                 .csrfTokenRequestHandler(spaCsrfTokenRequestHandler)
+                .ignoringRequestMatchers(
+                    "/api/auth/login",
+                    "/api/auth/register",
+                    "/api/auth/forgot-password",
+                    "/api/auth/verify-reset-otp",
+                    "/api/auth/reset-password"
+                )
                 .ignoringRequestMatchers(bearerAuthRequestMatcher()))
 
             // Enable CORS with the configuration below

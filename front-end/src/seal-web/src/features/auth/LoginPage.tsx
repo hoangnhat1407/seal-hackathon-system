@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   C, GradientText, PixelButton, PixelInput, FloatingParticles, TerminalWindow,
@@ -62,6 +62,8 @@ export function LoginPage() {
         // Not an error — the account exists but isn't approved yet. Send them to the
         // dedicated waiting page (which explains the review status) instead of a red error.
         navigate('/pending-approval');
+      } else if (result === 'account_inactive') {
+        setError("Your account is inactive. Please contact a System Admin to be reactivated.");
       } else if (result === 'access_denied') {
         setError("Sign-in was blocked by the server. Refresh the page and try again; if it persists, contact a system administrator.");
       } else {
