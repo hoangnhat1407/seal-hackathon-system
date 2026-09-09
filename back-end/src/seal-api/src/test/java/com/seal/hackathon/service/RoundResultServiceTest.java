@@ -76,6 +76,9 @@ class RoundResultServiceTest {
     @Mock
     private JudgeScoringCompletenessService completenessService;
 
+    @Mock
+    private HackathonEventService hackathonEventService;
+
     @InjectMocks
     private RoundResultService roundResultService;
 
@@ -201,6 +204,68 @@ class RoundResultServiceTest {
 
         assertTrue(error.getMessage().contains("No submissions"));
         verify(completenessService, never()).assertRoundComplete(any());
+    }
+
+    @Test
+    void publishResults_shouldPublishResultsAndNotCompleteEvent_whenRoundIsNotFinal() {
+        HackathonEvent event = event(1);
+        Round round = round(10, event, "ACTIVE");
+        round.setIsFinal(false);
+        Team team = team(20, "Seal Team");
+        RoundResult result = RoundResult.builder()
+                .resultId(100)
+                .round(round)
+                .team(team)
+                .rankPosition(1)
+                .totalScore(BigDecimal.TEN)
+                .isPublished(false)
+                .build();
+
+        when(roundRepository.findByIdAndEventId(round.getRoundId(), event.getEventId()))
+                .thenReturn(Optional.of(round));
+        when(resultRepository.findAllByRound_RoundIdOrderByRankPosition(round.getRoundId()))
+                .thenReturn(List.of(result));
+        when(teamMemberRepository.findByTeam_TeamId(team.getTeamId())).thenReturn(List.of());
+
+        List<RoundResultResponse> responses = roundResultService.publishResults(event.getEventId(), round.getRoundId());
+
+        assertEquals(1, responses.size());
+        assertTrue(result.getIsPublished());
+        assertEquals("FINALIZED", round.getStatus());
+        verify(roundRepository).save(round);
+        verify(hackathonEventService, never()).completeEvent(any());
+    }
+
+    @Test
+    void publishResults_shouldCompleteEvent_whenRoundIsFinalAndEventIsInProgress() {
+        HackathonEvent event = event(1);
+        event.setStatus("IN_PROGRESS");
+        Round round = round(10, event, "ACTIVE");
+        round.setIsFinal(true);
+        Team team = team(20, "Seal Team");
+        RoundResult result = RoundResult.builder()
+                .resultId(100)
+                .round(round)
+                .team(team)
+                .rankPosition(1)
+                .totalScore(BigDecimal.TEN)
+                .isPublished(false)
+                .build();
+
+        when(roundRepository.findByIdAndEventId(round.getRoundId(), event.getEventId()))
+                .thenReturn(Optional.of(round));
+        when(resultRepository.findAllByRound_RoundIdOrderByRankPosition(round.getRoundId()))
+                .thenReturn(List.of(result));
+        when(teamMemberRepository.findByTeam_TeamId(team.getTeamId())).thenReturn(List.of());
+        when(eventRepository.findById(event.getEventId())).thenReturn(Optional.of(event));
+
+        List<RoundResultResponse> responses = roundResultService.publishResults(event.getEventId(), round.getRoundId());
+
+        assertEquals(1, responses.size());
+        assertTrue(result.getIsPublished());
+        assertEquals("FINALIZED", round.getStatus());
+        verify(roundRepository).save(round);
+        verify(hackathonEventService).completeEvent(event.getEventId());
     }
 
     private HackathonEvent event(Integer eventId) {

@@ -3,7 +3,7 @@ import {
   C, GradientText, PixelCard, PixelButton, PixelBadge, PixelTabs,
 } from "@/shared/components/PixelComponents";
 import { PixelMenu, type PixelMenuEntry } from "@/shared/components/PixelMenu";
-import { apiFetch, ApiError, apiErrorMessage, reopenRequestsApi, type ReopenRequest, teamsApi, type Team } from "@/shared/apiClient";
+import { apiFetch, ApiError, apiErrorMessage, eventsApi, teamsApi, type Team } from "@/shared/apiClient";
 import { ConfirmDialog, type ConfirmVariant } from "@/shared/components/ConfirmDialog";
 import { usePermissions } from "@/shared/permissions";
 import { useNotifications } from "@/app/providers/NotificationProvider";
@@ -13,6 +13,7 @@ import {
   TrackRow, RoundRow, ApiTrack, ApiRound, normalizeTrack, normalizeRound, PendingAction,
 } from "@/features/events/eventUtils";
 import { canCompleteSetup, countUnassigned, teamsForTrack, MIN_TEAMS_PER_TRACK } from "@/features/events/trackStats";
+import { CreateEventCard } from "@/features/events/CreateEventCard";
 import { TracksTab } from "@/features/events/TracksTab";
 import { TrackProblemsTab } from "@/features/events/TrackProblemPanel";
 import { RoundsTab } from "@/features/events/RoundsTab";
@@ -24,9 +25,8 @@ import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
 // Coordinator's event console. Coordinators run an event's forward lifecycle
-// (OPEN → SETUP → IN_PROGRESS → COMPLETED) and configure tracks/rounds/criteria,
-// but they CANNOT create an event (Admin does) and CANNOT reopen a COMPLETED one
-// — for a completed event they file a reopen request for the Admin to approve.
+// (OPEN → SETUP → IN_PROGRESS → COMPLETED), create new events, and can directly
+// reopen a COMPLETED event.
 // Every status change is gated behind a confirmation dialog.
 //
 // This page is the orchestrator: the always-visible header (name/status/lifecycle
@@ -36,11 +36,12 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 // and Timers were already extracted (TrackProblemsTab/ContestTimerPanel).
 
 export function CoordEventsPage() {
-  const { canChangeEventStatus, canCompleteEvent, canRequestReopen } = usePermissions();
+  const { canChangeEventStatus, canCompleteEvent, canCreateEvent, canReopenEvent } = usePermissions();
   const { addToast } = useNotifications();
 
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -70,15 +71,12 @@ export function CoordEventsPage() {
   // Shared by Rounds/Criteria/Timers — which round's criteria/timer is being viewed.
   const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
 
-  // Confirmation dialog state (shared by every status change + reopen request +
+  // Confirmation dialog state (shared by every status change +
   // every tab's destructive/status actions, passed down to them as `openConfirm`).
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [actionWorking, setActionWorking] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
-
-  // Latest reopen request for the selected (COMPLETED) event, if any.
-  const [reopenReq, setReopenReq] = useState<ReopenRequest | null>(null);
 
   const selectedEvent = selectedEventId ? events.find(e => e.eventId === selectedEventId) ?? null : null;
 
@@ -153,17 +151,6 @@ export function CoordEventsPage() {
     return () => { cancelled = true; };
   }, [selectedEventId, selectedEvent?.status, teams]);
 
-  // ── Load latest reopen request for a COMPLETED event ──────────────
-  useEffect(() => {
-    setReopenReq(null);
-    if (!selectedEvent || selectedEvent.status !== 'COMPLETED' || !canRequestReopen) return;
-    let cancelled = false;
-    reopenRequestsApi.getForEvent(selectedEvent.eventId)
-      .then(res => { if (!cancelled) setReopenReq(res.data ?? null); })
-      .catch(() => { /* non-fatal — button just defaults to "request" */ });
-    return () => { cancelled = true; };
-  }, [selectedEvent, canRequestReopen]);
-
   // ── Confirmation plumbing ─────────────────────────────────────────
   function openConfirm(action: PendingAction) {
     setDialogError(null);
@@ -195,19 +182,16 @@ export function CoordEventsPage() {
   // ── Mutations (each is invoked only after dialog confirmation) ────
   async function doUpdateStatus(next: EventStatus) {
     if (!selectedEvent) return;
-    await apiFetch(`/api/events/${selectedEvent.eventId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ status: next }),
-    });
+    if (next === 'COMPLETED') {
+      await eventsApi.complete(selectedEvent.eventId);
+    } else {
+      await apiFetch(`/api/events/${selectedEvent.eventId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: next }),
+      });
+    }
     setEvents(prev => prev.map(e => e.eventId === selectedEvent.eventId ? { ...e, status: next } : e));
     addToast({ type: 'success', title: 'STATUS UPDATED', message: `Event moved to ${next}.` });
-  }
-
-  async function doRequestReopen(reasonText?: string) {
-    if (!selectedEvent) return;
-    const res = await reopenRequestsApi.create(selectedEvent.eventId, reasonText);
-    setReopenReq(res.data);
-    addToast({ type: 'success', title: 'REQUEST SENT', message: 'Your reopen request was sent to System Admin.' });
   }
 
   // Open the confirm dialog for a lifecycle status change.
@@ -255,17 +239,19 @@ export function CoordEventsPage() {
     });
   }
 
-  // Open the confirm dialog for filing a reopen request.
-  function requestReopen() {
+  // ── Reopen event (COMPLETED → IN_PROGRESS) ─────────────────────────
+  function confirmReopen() {
     if (!selectedEvent) return;
     openConfirm({
-      title: 'Request to reopen this event?',
-      message: `Send a request to reopen "${selectedEvent.name}" (currently Completed) to System Admin.`,
-      warning: 'You cannot reopen the event yourself. The request is sent to System Admin for review; the event status will not change until an admin approves it.',
-      confirmLabel: 'SEND REQUEST',
+      title: 'Reopen this event?',
+      message: `Reopen "${selectedEvent.name}" (COMPLETED → IN_PROGRESS). The event will become active again.`,
+      confirmLabel: 'REOPEN EVENT',
       variant: 'cyber',
-      withReason: true,
-      run: async (reasonText) => { await doRequestReopen(reasonText); },
+      run: async () => {
+        await eventsApi.reopen(selectedEvent.eventId);
+        setEvents(prev => prev.map(e => e.eventId === selectedEvent.eventId ? { ...e, status: 'IN_PROGRESS' } : e));
+        addToast({ type: 'success', title: 'EVENT REOPENED', message: `"${selectedEvent.name}" is now In Progress.` });
+      },
     });
   }
 
@@ -312,8 +298,22 @@ export function CoordEventsPage() {
             <GradientText>Events</GradientText>
           </h1>
         </div>
-        {/* Coordinators do not create events — that is a System Admin action. */}
+        {canCreateEvent && (
+          <PixelButton variant="cyber" onClick={() => setShowCreate(s => !s)}>CREATE EVENT</PixelButton>
+        )}
       </div>
+
+      {showCreate && (
+        <CreateEventCard
+          onCreated={(created) => {
+            setEvents(prev => [...prev, created]);
+            setSelectedEventId(created.eventId);
+            setShowCreate(false);
+            addToast({ type: 'success', title: 'EVENT CREATED', message: `"${created.name}" has been created (DRAFT).` });
+          }}
+          onCancel={() => setShowCreate(false)}
+        />
+      )}
 
       {actionError && (
         <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", color: C.red, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, padding: "10px 14px" }}>
@@ -391,13 +391,9 @@ export function CoordEventsPage() {
                 );
               })()}
 
-              {/* COMPLETED: coordinators can only REQUEST a reopen. */}
-              {selectedEvent.status === 'COMPLETED' && canRequestReopen && (
-                reopenReq?.status === 'PENDING' ? (
-                  <PixelBadge color="yellow">AWAITING ADMIN REVIEW</PixelBadge>
-                ) : (
-                  <PixelButton variant="secondary" onClick={requestReopen}>REQUEST REOPEN</PixelButton>
-                )
+              {/* COMPLETED: coordinator can directly reopen. */}
+              {selectedEvent.status === 'COMPLETED' && canReopenEvent && (
+                <PixelButton variant="cyber" onClick={confirmReopen}>REOPEN EVENT</PixelButton>
               )}
             </div>
           </div>
