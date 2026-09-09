@@ -4,3 +4,6 @@ E2E testing/**/playwright-report/
 # Local IDE metadata and editor backup files
 .idea/
 *.bkp
+.env
+.vscode/
+artifacts/

@@ -23,7 +23,7 @@ import java.util.Set;
 public class DemoSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DemoSeeder.class);
-    private static final Set<String> VALID = Set.of("NONE", "S1", "S25", "S3");
+    private static final Set<String> VALID = Set.of("NONE", "S1", "S25", "S3", "ALL", "MULTI");
 
     @Value("${app.seed.scenario:NONE}")
     private String scenario;
@@ -38,7 +38,7 @@ public class DemoSeeder implements CommandLineRunner {
             log.warn("[demo] unknown app.seed.scenario='{}' — skipping (expected {})", scenario, VALID);
             return;
         }
-        if ("NONE".equals(s)) {
+        if ("NONE".equals(s) || "ALL".equals(s) || "MULTI".equals(s)) {
             return;
         }
         if (userRepo.existsByEmail(DemoScenario.COORDINATOR_EMAIL)) {

@@ -37,7 +37,7 @@ public class Round {
     @Column(name = "end_time", nullable = false)
     private LocalDateTime endTime;
 
-    @Column(name = "submission_deadline", nullable = false)
+    @Column(name = "submission_deadline")
     private LocalDateTime submissionDeadline;
 
     @Column(name = "top_n_advance")

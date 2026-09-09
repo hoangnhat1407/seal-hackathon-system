@@ -7,11 +7,6 @@ import {
   EventRow, RoundRow, ApiRound, normalizeRound, splitDT, joinDT, toDDMM, parseDDMM, yearOf, fmtDT, PendingAction,
 } from "@/features/events/eventUtils";
 
-// The Rounds tab of CoordEventsPage: round CRUD with a DD/MM + HH:MM date form
-// (the year is fixed to the parent event's own start year) and the OPEN/CLOSE
-// submission toggle. Extracted verbatim out of CoordEventsPage.tsx — behavior,
-// API calls, and copy are unchanged.
-
 export function RoundsTab({
   event, rounds, setRounds, selectedRoundId, setSelectedRoundId, detailLoading, openConfirm, setActionError,
 }: {
@@ -29,16 +24,14 @@ export function RoundsTab({
   // Round form (collapsed behind "+ ADD ROUND"; also opens for inline edits)
   const [showAddRound, setShowAddRound] = useState(false);
   const [rdName, setRdName] = useState("");
-  const [rdOrder, setRdOrder] = useState(1);
   const [rdStartDate, setRdStartDate] = useState("");
   const [rdStartTime, setRdStartTime] = useState("");
   const [rdEndDate, setRdEndDate] = useState("");
   const [rdEndTime, setRdEndTime] = useState("");
-  const [rdDeadlineDate, setRdDeadlineDate] = useState("");
-  const [rdDeadlineTime, setRdDeadlineTime] = useState("");
   const [rdTopN, setRdTopN] = useState<number | null>(3);
   const [rdIsFinal, setRdIsFinal] = useState(false);
   const [editingRoundId, setEditingRoundId] = useState<number | null>(null);
+
   // The shared add/edit form sits below the round list, so an Edit click on the
   // first row is easy to miss — scroll the form into view whenever it opens.
   const roundFormRef = useRef<HTMLDivElement>(null);
@@ -48,12 +41,8 @@ export function RoundsTab({
     }
   }, [editingRoundId, showAddRound]);
 
-  // Builds the round's three datetimes from the DD/MM + HH:MM form fields.
-  // The year is never typed by the coordinator — it's fixed to the parent
-  // event's own start year, since a round can't outlive its event. Returns
-  // null (after toasting the offending field) if a filled-in date isn't a
-  // valid DD/MM.
-  function buildRoundDates(): { startTime?: string; endTime?: string; submissionDeadline?: string } | null {
+  // Builds the round's start and end datetimes from the DD/MM + HH:MM form fields and validates constraints.
+  function buildRoundDates(): { startTime?: string; endTime?: string } | null {
     const year = yearOf(event.startDate);
     const errors: string[] = [];
     const resolve = (ddmm: string, label: string): string => {
@@ -64,16 +53,88 @@ export function RoundsTab({
     };
     const start = resolve(rdStartDate, "Start date");
     const end = resolve(rdEndDate, "End date");
-    const deadline = resolve(rdDeadlineDate, "Deadline date");
     if (errors.length > 0) {
       addToast({ type: 'warning', title: 'INVALID DATE', message: errors.join(' ') });
       return null;
     }
+    if (!start) {
+      addToast({ type: 'warning', title: 'MISSING DATE', message: 'Please enter a start date (DD/MM).' });
+      return null;
+    }
+    if (!end) {
+      addToast({ type: 'warning', title: 'MISSING DATE', message: 'Please enter an end date (DD/MM).' });
+      return null;
+    }
+
+    const startDT = joinDT(start, rdStartTime || "00:00");
+    const endDT = joinDT(end, rdEndTime || "23:59");
+
+    if (!startDT || !endDT) {
+      addToast({ type: 'warning', title: 'INVALID DATE', message: 'Invalid start or end date/time.' });
+      return null;
+    }
+
+    const sTime = new Date(startDT).getTime();
+    const eTime = new Date(endDT).getTime();
+
+    // 1. Check start < end
+    if (sTime >= eTime) {
+      addToast({ type: 'warning', title: 'INVALID TIME', message: 'Round start time must be before end time.' });
+      return null;
+    }
+
+    // 2. Check within event dates
+    if (event.startDate) {
+      const evStart = new Date(event.startDate).getTime();
+      if (sTime < evStart) {
+        addToast({
+          type: 'warning',
+          title: 'OUT OF EVENT BOUNDS',
+          message: `Round start time cannot be earlier than event start (${fmtDT(event.startDate)}).`,
+        });
+        return null;
+      }
+    }
+    if (event.endDate) {
+      const evEnd = new Date(event.endDate).getTime();
+      if (eTime > evEnd) {
+        addToast({
+          type: 'warning',
+          title: 'OUT OF EVENT BOUNDS',
+          message: `Round end time cannot be later than event end (${fmtDT(event.endDate)}).`,
+        });
+        return null;
+      }
+    }
+
+    // 3. Check conflict/overlap with other rounds in the event
+    for (const r of rounds) {
+      if (r.roundId === editingRoundId) continue;
+      const rStart = new Date(r.startTime).getTime();
+      const rEnd = new Date(r.endTime).getTime();
+      if (sTime < rEnd && rStart < eTime) {
+        addToast({
+          type: 'warning',
+          title: 'ROUND CONFLICT',
+          message: `Round schedule conflicts with "${r.name}" (${fmtDT(r.startTime)} → ${fmtDT(r.endTime)}).`,
+        });
+        return null;
+      }
+    }
+
     return {
-      startTime: joinDT(start, rdStartTime),
-      endTime: joinDT(end, rdEndTime),
-      submissionDeadline: joinDT(deadline, rdDeadlineTime),
+      startTime: startDT,
+      endTime: endDT,
     };
+  }
+
+  async function reloadRounds() {
+    try {
+      const res = await apiFetch<{ data: ApiRound[] }>(`/api/events/${event.eventId}/rounds`);
+      setRounds(res.data.map(normalizeRound));
+    } catch {
+      // ignore
+    }
   }
 
   async function addRound() {
@@ -86,18 +147,18 @@ export function RoundsTab({
     if (!dates) return;
     setActionError(null);
     try {
-      const res = await apiFetch<{ data: ApiRound }>(`/api/events/${event.eventId}/rounds`, {
+      await apiFetch<{ data: ApiRound }>(`/api/events/${event.eventId}/rounds`, {
         method: 'POST',
         body: JSON.stringify({
           name,
-          orderNumber: rdOrder,
           ...dates,
           topNAdvance: rdTopN ?? undefined,
           isFinal: rdIsFinal,
         }),
       });
-      setRounds(prev => [...prev, normalizeRound(res.data)].sort((a, b) => a.orderNumber - b.orderNumber));
-      setRdName(""); setRdStartDate(""); setRdStartTime(""); setRdEndDate(""); setRdEndTime(""); setRdDeadlineDate(""); setRdDeadlineTime(""); setRdIsFinal(false);
+      await reloadRounds();
+      setRdName(""); setRdStartDate(""); setRdStartTime(""); setRdEndDate(""); setRdEndTime(""); setRdIsFinal(false);
+      setShowAddRound(false);
       addToast({ type: 'success', title: 'ROUND ADDED', message: `"${name}" created.` });
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Failed to add round.");
@@ -108,20 +169,17 @@ export function RoundsTab({
   function startEditRound(r: RoundRow) {
     setEditingRoundId(r.roundId);
     setRdName(r.name);
-    setRdOrder(r.orderNumber);
     const st = splitDT(r.startTime); setRdStartDate(toDDMM(st.date)); setRdStartTime(st.time);
     const en = splitDT(r.endTime); setRdEndDate(toDDMM(en.date)); setRdEndTime(en.time);
-    const dl = splitDT(r.submissionDeadline); setRdDeadlineDate(toDDMM(dl.date)); setRdDeadlineTime(dl.time);
     setRdTopN(r.topNAdvance ?? null);
     setRdIsFinal(r.isFinal);
   }
 
   function cancelRoundEdit() {
     setEditingRoundId(null);
-    setRdName(""); setRdOrder(1);
+    setRdName("");
     setRdStartDate(""); setRdStartTime("");
     setRdEndDate(""); setRdEndTime("");
-    setRdDeadlineDate(""); setRdDeadlineTime("");
     setRdTopN(3); setRdIsFinal(false);
   }
 
@@ -136,19 +194,16 @@ export function RoundsTab({
     if (!dates) return;
     setActionError(null);
     try {
-      const res = await apiFetch<{ data: ApiRound }>(`/api/events/${event.eventId}/rounds/${editingRoundId}`, {
+      await apiFetch<{ data: ApiRound }>(`/api/events/${event.eventId}/rounds/${editingRoundId}`, {
         method: 'PUT',
         body: JSON.stringify({
           name,
-          orderNumber: rdOrder,
           ...dates,
           isFinal: rdIsFinal,
           ...(rdTopN == null ? { clearTopNAdvance: true } : { topNAdvance: rdTopN }),
         }),
       });
-      const updated = normalizeRound(res.data);
-      setRounds(prev => prev.map(r => r.roundId === editingRoundId ? updated : r)
-        .sort((a, b) => a.orderNumber - b.orderNumber));
+      await reloadRounds();
       cancelRoundEdit();
       addToast({ type: 'success', title: 'ROUND UPDATED', message: `"${name}" saved.` });
     } catch (err) {
@@ -171,7 +226,7 @@ export function RoundsTab({
       variant: 'danger',
       run: async () => {
         await apiFetch(`/api/events/${eventId}/rounds/${r.roundId}`, { method: 'DELETE' });
-        setRounds(prev => prev.filter(x => x.roundId !== r.roundId));
+        await reloadRounds();
         if (editingRoundId === r.roundId) cancelRoundEdit();
         if (selectedRoundId === r.roundId) setSelectedRoundId(null);
         addToast({ type: 'success', title: 'ROUND DELETED', message: `"${r.name}" removed.` });
@@ -186,7 +241,7 @@ export function RoundsTab({
       title: 'Open this round?',
       message: (
         <div>
-          Round <span style={{ color: C.text, fontWeight: 700 }}>"{r.name}"</span> will be opened — teams can submit to it until the deadline.
+          Round <span style={{ color: C.text, fontWeight: 700 }}>"{r.name}"</span> will be opened — teams can submit to it.
         </div>
       ),
       warning: r.status === 'CLOSED'
@@ -228,11 +283,21 @@ export function RoundsTab({
     }
   }
 
+  // Normal rounds on top, final round at the bottom
+  const sortedRounds = [...rounds].sort((a, b) => {
+    const aFinal = a.isFinal ? 1 : 0;
+    const bFinal = b.isFinal ? 1 : 0;
+    if (aFinal !== bFinal) return aFinal - bFinal;
+    return a.orderNumber - b.orderNumber;
+  });
+
+  const hasExistingFinal = rounds.some(r => r.isFinal && r.roundId !== editingRoundId);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {detailLoading && <div style={{ color: C.textMuted, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>Loading...</div>}
-      {!detailLoading && rounds.length === 0 && <div style={{ color: C.textMuted, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>No rounds yet</div>}
-      {rounds.map(r => {
+      {!detailLoading && sortedRounds.length === 0 && <div style={{ color: C.textMuted, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>No rounds yet</div>}
+      {sortedRounds.map(r => {
         const isEditing = editingRoundId === r.roundId;
         const topNLabel = r.topNAdvance != null
           ? (r.isFinal ? ` · Top ${r.topNAdvance} overall (winners)` : ` · Top ${r.topNAdvance} per track advance`)
@@ -252,7 +317,9 @@ export function RoundsTab({
               {r.status === 'FINALIZED' && <span style={{ color: C.blue, fontWeight: 700 }}> · FINALIZED</span>}
               {r.status === 'CLOSED' && <span style={{ color: C.red, fontWeight: 700 }}> · CLOSED</span>}
             </div>
-            <div style={{ color: C.textMuted, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, marginTop: 2 }}>Deadline: {fmtDT(r.submissionDeadline)}{topNLabel}</div>
+            <div style={{ color: C.textMuted, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, marginTop: 2 }}>
+              {fmtDT(r.startTime)} → {fmtDT(r.endTime)}{topNLabel}
+            </div>
           </div>
           {/* Action group: [ OPEN/CLOSE toggle ][ ⋯ (Edit/Delete) ]. A round is
               either open for submissions or not: OPEN shows when it isn't
@@ -289,16 +356,14 @@ export function RoundsTab({
           <div style={{ color: editingRoundId != null ? C.green : C.text, fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 700, marginBottom: 14 }}>
             {editingRoundId != null ? "EDIT ROUND" : "ADD ROUND"}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, alignItems: "end" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, alignItems: "end" }}>
             <PixelInput label="Name" value={rdName} onChange={(e) => setRdName(e.target.value)} />
-            <PixelInput label="Order" type="number" value={String(rdOrder)} onChange={(e) => setRdOrder(Number(e.target.value))} />
             <PixelInput label="Top N" type="number" placeholder="No cut-off" value={rdTopN == null ? "" : String(rdTopN)} onChange={(e) => setRdTopN(e.target.value === "" ? null : Number(e.target.value))} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginTop: 10 }}>
             {[
               { label: "Start", date: rdStartDate, time: rdStartTime, onDate: setRdStartDate, onTime: setRdStartTime },
               { label: "End", date: rdEndDate, time: rdEndTime, onDate: setRdEndDate, onTime: setRdEndTime },
-              { label: "Deadline", date: rdDeadlineDate, time: rdDeadlineTime, onDate: setRdDeadlineDate, onTime: setRdDeadlineTime },
             ].map(({ label, date, time, onDate, onTime }) => (
               <div key={label} style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
                 <div style={{ flex: 1 }}>
@@ -315,11 +380,25 @@ export function RoundsTab({
               type="checkbox"
               id="rdIsFinal"
               checked={rdIsFinal}
+              disabled={hasExistingFinal && !rdIsFinal}
               onChange={(e) => setRdIsFinal(e.target.checked)}
-              style={{ accentColor: C.green, width: 14, height: 14, cursor: "pointer" }}
+              style={{
+                accentColor: C.green,
+                width: 14,
+                height: 14,
+                cursor: hasExistingFinal && !rdIsFinal ? "not-allowed" : "pointer",
+              }}
             />
-            <label htmlFor="rdIsFinal" style={{ color: C.text, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, cursor: "pointer" }}>
-              Final Round
+            <label
+              htmlFor="rdIsFinal"
+              style={{
+                color: hasExistingFinal && !rdIsFinal ? C.textMuted : C.text,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 12,
+                cursor: hasExistingFinal && !rdIsFinal ? "not-allowed" : "pointer",
+              }}
+            >
+              Final Round {hasExistingFinal && !rdIsFinal ? "(Sự kiện đã có vòng chung kết)" : ""}
             </label>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>

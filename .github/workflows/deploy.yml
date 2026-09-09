@@ -1,9 +1,9 @@
-name: Deploy preview branch to AWS EC2
+name: Deploy develop branch to AWS EC2
 
 on:
   push:
     branches:
-      - fix/hoangnhat-update-judge-admin
+      - develop
   pull_request:
     branches:
       - develop
