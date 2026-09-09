@@ -111,6 +111,7 @@ public class MultiEventDemoSeeder implements CommandLineRunner {
     private final RoundResultService roundResultService;
     private final PrizeService prizeService;
     private final HackathonEventService hackathonEventService;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Value("${app.seed.scenario:NONE}")
     private String scenario;
@@ -138,33 +139,83 @@ public class MultiEventDemoSeeder implements CommandLineRunner {
             return;
         }
 
-        boolean springExists = eventExists(SPRING_EVENT_NAME);
-        boolean summerExists = eventExists(SUMMER_EVENT_NAME);
-        boolean fallExists = eventExists(FALL_EVENT_NAME);
+        HackathonEvent spring = findEvent(SPRING_EVENT_NAME);
+        HackathonEvent summer = findEvent(SUMMER_EVENT_NAME);
+        HackathonEvent fall = findEvent(FALL_EVENT_NAME);
 
-        if (springExists && summerExists && fallExists) {
-            log.info("[multi-seed] All 3 demo events (Spring, Summer, Fall 2026) already exist — skipping.");
+        boolean springValid = spring != null && "OPEN".equalsIgnoreCase(spring.getStatus());
+        boolean summerValid = summer != null && "IN_PROGRESS".equalsIgnoreCase(summer.getStatus());
+        boolean fallValid = fall != null && "COMPLETED".equalsIgnoreCase(fall.getStatus());
+
+        if (summer != null && !summerValid) {
+            log.warn("[multi-seed] Existing '{}' has status '{}' (expected IN_PROGRESS for S2.5). Cleaning up stale event to reseed...",
+                    SUMMER_EVENT_NAME, summer.getStatus());
+            cleanupEvent(summer.getEventId());
+            summerValid = false;
+        }
+
+        if (springValid && summerValid && fallValid) {
+            log.info("[multi-seed] All 3 demo events (Spring, Summer, Fall 2026) already exist in expected state — skipping.");
             return;
         }
 
         log.info("[multi-seed] Starting multi-event demo seeding for Spring, Summer, and Fall 2026…");
         DemoStaff staff = getOrCreateStaff();
 
-        if (!springExists) {
+        if (!springValid) {
             seedSpringS1();
         }
-        if (!summerExists) {
+        if (!summerValid) {
             seedSummerS25(staff);
         }
-        if (!fallExists) {
+        if (!fallValid) {
             seedFallS3(staff);
         }
 
         log.info("[multi-seed] Multi-event demo seeding completed successfully!");
     }
 
-    private boolean eventExists(String eventName) {
-        return eventRepo.findAll().stream().anyMatch(e -> eventName.equalsIgnoreCase(e.getName()));
+    private HackathonEvent findEvent(String eventName) {
+        return eventRepo.findAll().stream()
+                .filter(e -> eventName.equalsIgnoreCase(e.getName()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void cleanupEvent(Integer eventId) {
+        log.info("[multi-seed] Cleaning up event id={}", eventId);
+        jdbcTemplate.update("DELETE FROM score WHERE submission_id IN (SELECT submission_id FROM submission WHERE round_id IN (SELECT round_id FROM round WHERE event_id = ?))", eventId);
+        jdbcTemplate.update("DELETE FROM submission WHERE round_id IN (SELECT round_id FROM round WHERE event_id = ?)", eventId);
+        jdbcTemplate.update("DELETE FROM roundresult WHERE round_id IN (SELECT round_id FROM round WHERE event_id = ?)", eventId);
+        jdbcTemplate.update("DELETE FROM judgeassignment WHERE round_id IN (SELECT round_id FROM round WHERE event_id = ?)", eventId);
+        jdbcTemplate.update("DELETE FROM roundtimernotice WHERE timer_id IN (SELECT timer_id FROM roundtimer WHERE round_id IN (SELECT round_id FROM round WHERE event_id = ?))", eventId);
+        jdbcTemplate.update("DELETE FROM roundtimer WHERE round_id IN (SELECT round_id FROM round WHERE event_id = ?)", eventId);
+        jdbcTemplate.update("DELETE FROM scoringcriteria WHERE event_id = ?", eventId);
+        jdbcTemplate.update("DELETE FROM round WHERE event_id = ?", eventId);
+        jdbcTemplate.update("DELETE FROM mentorassignment WHERE track_id IN (SELECT track_id FROM track WHERE event_id = ?)", eventId);
+        jdbcTemplate.update("DELETE FROM track WHERE event_id = ?", eventId);
+        jdbcTemplate.update("DELETE FROM prize WHERE event_id = ?", eventId);
+        jdbcTemplate.update("DELETE FROM announcement WHERE event_id = ?", eventId);
+        jdbcTemplate.update("DELETE FROM usereventrole WHERE event_id = ?", eventId);
+        jdbcTemplate.update("DELETE FROM participanteventhistory WHERE event_id = ?", eventId);
+
+        List<Integer> teamIds = jdbcTemplate.queryForList(
+                "SELECT team_id FROM teamevententry WHERE event_id = ?", Integer.class, eventId);
+        jdbcTemplate.update("DELETE FROM teamevententry WHERE event_id = ?", eventId);
+        for (Integer teamId : teamIds) {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM teamevententry WHERE team_id = ?", Integer.class, teamId);
+            if (count == null || count == 0) {
+                jdbcTemplate.update("DELETE FROM joinrequest WHERE team_id = ?", teamId);
+                jdbcTemplate.update("DELETE FROM teaminvite WHERE team_id = ?", teamId);
+                jdbcTemplate.update("DELETE FROM teamrejoinrequest WHERE team_id = ?", teamId);
+                jdbcTemplate.update("DELETE FROM mentorsupportrequest WHERE team_id = ?", teamId);
+                jdbcTemplate.update("DELETE FROM teammember WHERE team_id = ?", teamId);
+                jdbcTemplate.update("DELETE FROM team WHERE team_id = ?", teamId);
+            }
+        }
+
+        jdbcTemplate.update("DELETE FROM hackathonevent WHERE event_id = ?", eventId);
     }
 
     // ── 1. Shared Staff ───────────────────────────────────────────────

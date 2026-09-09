@@ -340,7 +340,7 @@ export function statusChangeCopy(from: EventStatus, action: StatusAction): Confi
     return {
       title: 'Complete this event?',
       message: base,
-      warning: 'Once completed, you cannot reopen the event yourself; only System Admin can reopen it. Are you sure?',
+      warning: 'Once completed, the event can be reopened by the Coordinator if needed.',
       confirmLabel: 'CONFIRM COMPLETE',
       variant: 'cyber',
     };

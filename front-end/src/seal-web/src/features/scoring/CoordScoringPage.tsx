@@ -176,8 +176,15 @@ export function CoordScoringPage() {
     try {
       await resultsApi.publish(selectedEventId, selectedRoundId);
       await loadResults(selectedEventId, selectedRoundId);
-      setNotice("Results published.");
-      addToast({ type: 'success', title: 'RESULTS PUBLISHED', message: 'Round results are now visible to participants.' });
+      if (selectedRound?.isFinal) {
+        const evRes = await eventsApi.getAll();
+        setEvents(evRes.data ?? []);
+        setNotice("Final results published. Event is now COMPLETED.");
+        addToast({ type: 'success', title: 'EVENT COMPLETED', message: `Final results published. "${currentEvent?.name}" is now COMPLETED.` });
+      } else {
+        setNotice("Results published.");
+        addToast({ type: 'success', title: 'RESULTS PUBLISHED', message: 'Round results are now visible to participants.' });
+      }
       setConfirmAction(null);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Failed to publish results.");
@@ -338,7 +345,9 @@ export function CoordScoringPage() {
         <ConfirmDialog
           title="Publish these results?"
           message={`Publish the ranking of "${selectedRound?.name ?? 'this round'}" (${results.length} team${results.length === 1 ? "" : "s"}).`}
-          warning="Results become visible to all participants immediately."
+          warning={isFinalRound
+            ? "Publishing final round results will mark the event as COMPLETED and lock final standings."
+            : "Results become visible to all participants immediately."}
           confirmLabel="PUBLISH RESULTS"
           variant="danger"
           requireTypedText={selectedRound?.name}

@@ -34,10 +34,9 @@ public class HackathonEventController {
                 hackathonEventService.getEventById(eventId)));
     }
 
-    // Creating an event is a PLATFORM action — System Admin only. Coordinators
-    // run events they are given, they do not spin up new ones (returns 403).
+    // Creating an event can only be done by Coordinator.
     @PostMapping
-    @PreAuthorize("hasRole('SYSTEM_ADMIN')")
+    @PreAuthorize("hasRole('EVENT_COORDINATOR')")
     public ResponseEntity<ApiResponse<HackathonEventResponse>> createEvent(
             @Valid @RequestBody CreateEventRequest request,
             Authentication authentication) {
@@ -49,7 +48,7 @@ public class HackathonEventController {
     // Generic update (status transitions, dates, mode, name) — both the owning
     // Coordinator and the System Admin may patch. NOTE: reopening a COMPLETED
     // event is NOT possible here (the service's transition map blocks
-    // COMPLETED -> *); use the admin-only /reopen endpoint below.
+    // COMPLETED -> *); use the dedicated /reopen endpoint below.
     @PutMapping("/{eventId}")
     @PreAuthorize("hasAnyRole('EVENT_COORDINATOR','SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<HackathonEventResponse>> updateEvent(
@@ -59,24 +58,22 @@ public class HackathonEventController {
                 hackathonEventService.updateEvent(eventId, request)));
     }
 
-    // Complete a running event (IN_PROGRESS -> COMPLETED). System Admin ONLY —
-    // Coordinators cannot complete an event (403), and the generic PUT can't
-    // either (transition not allowed).
+    // Complete a running event (IN_PROGRESS -> COMPLETED) — Coordinator only.
     @PostMapping("/{eventId}/complete")
-    @PreAuthorize("hasRole('SYSTEM_ADMIN')")
+    @PreAuthorize("hasRole('EVENT_COORDINATOR')")
     public ResponseEntity<ApiResponse<HackathonEventResponse>> completeEvent(
             @PathVariable Integer eventId) {
         return ResponseEntity.ok(ApiResponse.success("Event completed successfully.",
                 hackathonEventService.completeEvent(eventId)));
     }
 
-    // Reopen a COMPLETED event (COMPLETED -> IN_PROGRESS). System Admin ONLY.
-    // Coordinators cannot reach this (403) — they file a reopen request instead.
+    // Reopen a COMPLETED event (COMPLETED -> IN_PROGRESS) — Coordinator only.
     @PostMapping("/{eventId}/reopen")
-    @PreAuthorize("hasRole('SYSTEM_ADMIN')")
+    @PreAuthorize("hasRole('EVENT_COORDINATOR')")
     public ResponseEntity<ApiResponse<HackathonEventResponse>> reopenEvent(
             @PathVariable Integer eventId) {
         return ResponseEntity.ok(ApiResponse.success("Event reopened successfully.",
                 hackathonEventService.reopenEvent(eventId)));
     }
 }
+
